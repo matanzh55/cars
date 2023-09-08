@@ -1,37 +1,56 @@
-from flask import Flask, request, jsonify
-from flask_sqlalchemy import SQLAlchemy
-from datetime import datetime
+from flask import Flask, request, render_template
+import psycopg2
 
 app = Flask(__name__)
 
-# Configure your PostgreSQL database connection
-app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://matanzh:Dr69740968$$@20.71.177.25/flask_app'
-db = SQLAlchemy(app)
+# Database connection configuration
+db_config = {
+    'dbname': 'cars',
+    'user': 'matanzh',
+    'password': 'matanzh',
+    'host': '10.0.2.5',  #private IP PostgreSQL VM
+    'port': '5432',
+}
 
-# Define a model for your data
-class Data(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(255), nullable=False)
-    value = db.Column(db.Float, nullable=False)
-    time = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+def connect_to_database():
+    try:
+        connection = psycopg2.connect(**db_config)
+        return connection
+    except Exception as e:
+        print("Error connecting to the database:", str(e))
+        return None
 
-@app.route('/data', methods=['GET', 'POST'])
-def create_data():
-    data_json = request.get_json()
+@app.route('/')
+def home():
+    return render_template('index.html')
 
-    if 'name' in data_json and 'value' in data_json and 'time' in data_json:
-        name = data_json['name']
-        value = data_json['value']
-        time = datetime.strptime(data_json['time'], "%a %b %d %H:%M:%S %Z %Y")
-
-        new_data = Data(name=name, value=value, time=time)
-
-        db.session.add(new_data)
-        db.session.commit()
-
-        return jsonify({'message': 'Data created successfully'}), 201
+@app.route('/cars', methods=['GET'])
+def get_cars():
+    connection = connect_to_database()
+    if connection:
+        cursor = connection.cursor()
+        cursor.execute("SELECT * FROM books;")
+        cars = cursor.fetchall()
+        connection.close()
+        return render_template('cars.html', cars=cars)
     else:
-        return jsonify({'error': 'Invalid data format'}), 400
+        return "Database connection error"
+
+@app.route('/add_car', methods=['POST'])
+def add_car():
+    brand = request.form.get('brand')
+    car_number = request.form.get('car_number')
+    manufacturing_date = request.form.get("manufacturing_date")
+
+    connection = connect_to_database()
+    if connection:
+        cursor = connection.cursor()
+        cursor.execute("INSERT INTO cars (brand, car_number, manufacturing_date) VALUES (%s, %s, %s);", (brand, car_number, manufacturing_date))
+        connection.commit()
+        connection.close()
+        return "Car added successfully"
+    else:
+        return "Database connection error"
 
 if __name__ == '__main__':
-    app.run(debug=True,host="0.0.0.0",port=8080)
+    app.run(host='0.0.0.0', port=5000)
